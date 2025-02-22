@@ -18,13 +18,14 @@ const SAVE_DELAY = 100;
 export function createStorage(storePath: string | null) {
 	const [data, setData] = useMutative<Record<string, any> | undefined>(undefined);
 	const [loading, setLoading] = useState(true);
+	const loadingRef = useRef(loading);
 	const localDataRef = useRef(null);
 	const fileStoreRef = useRef<Store | null>(null);
 	const timeoutRef = useRef<number>(undefined);
 
-	// useEffect(() => {
-	// 	if (data) setLoading(false);
-	// }, [data]);
+	useEffect(() => {
+		loadingRef.current = loading;
+	}, [loading]);
 
 	// load data
 	useEffect(() => {
@@ -39,7 +40,7 @@ export function createStorage(storePath: string | null) {
 
 					// 先检查文件是否存在及其内容
 					const isExists = await exists(storePath);
-					
+
 					if (!isExists) {
 						const newObj = {};
 						setData(newObj);
@@ -76,10 +77,10 @@ export function createStorage(storePath: string | null) {
 	}, [storePath]);
 
 	const setItem = useCallback((key: string, newValueOrHandler: Dispatch<SetStateAction<any>>) => {
-		if (loading) return;
+		if (loadingRef.current) return;
 		window.clearTimeout(timeoutRef.current);
 		setData(data => {
-			if (loading || data === undefined) return;
+			if (loadingRef.current || data === undefined) return;
 			const prev = data[key];
 			let value: any = newValueOrHandler;
 			try {
@@ -94,10 +95,10 @@ export function createStorage(storePath: string | null) {
 				}
 			}
 		});
-	}, [storePath, loading, fileStoreRef, localDataRef, timeoutRef]);
+	}, [storePath, loadingRef, fileStoreRef, localDataRef, timeoutRef]);
 
 	const getItem = useCallback((key: string, defaultValue: object) => {
-		if (loading) return undefined;
+		if (loadingRef.current) return undefined;
 		if (data === undefined) return defaultValue;
 		const value = data[key];
 		if (value === undefined && defaultValue !== undefined) {
@@ -108,7 +109,7 @@ export function createStorage(storePath: string | null) {
 			return defaultValue;
 		}
 		return value;
-	}, [loading, data]);
+	}, [loadingRef, data]);
 
 	const useItem = useCallback((key: string, defaultValue: any) => {
 		const value = getItem(key, defaultValue);

@@ -1,4 +1,7 @@
 {
+	"Pause Sync": "Pause Sync",
+	"Show Window": "Show Window",
+	"Quit": "Quit",
 	"Success": "Success",
 	"ON": "ON",
 	"OFF": "OFF",
@@ -8,6 +11,9 @@
 	"Connected": "Connected",
 	"Connection Error": "Connection Error",
 	"Disconnected": "Disconnected",
+	"Sync Paused": "Sync Paused",
+	"Clipboard sync has been paused": "Clipboard sync has been paused",
+	"Clipboard sync has been resumed": "Clipboard sync has been resumed",
 	"Client ID": "Client ID",
 	"clipboard_type": "Type: {{ type }}",
 	"clipboard_size": "Size limit: {{ size }}",

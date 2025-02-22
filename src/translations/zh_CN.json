@@ -1,4 +1,7 @@
 {
+  "Pause Sync": "暂停同步",
+  "Show Window": "显示窗口",
+  "Quit": "退出",
 	"Success": "成功",
 	"ON": "ON",
 	"OFF": "OFF",
@@ -8,6 +11,9 @@
 	"Connected": "已连接",
 	"Connection Error": "服务器连接失败",
 	"Disconnected": "已断开连接",
+	"Sync Paused": "暂停同步",
+	"Clipboard sync has been paused": "剪贴板同步已暂停",
+	"Clipboard sync has been resumed": "剪贴板同步已恢复",
 	"Client ID": "客户端 ID",
 	"clipboard_type": "类型: {{ type }}",
 	"clipboard_size": "大小限制: {{ size }}",

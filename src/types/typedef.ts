@@ -41,3 +41,11 @@ enum SocketState {
   ERROR,
   DISCONNECTED
 }
+
+/**
+ * @description 托盘事件对象内容
+ */
+export interface TrayEvent {
+  message: string;
+  data?: string;
+}

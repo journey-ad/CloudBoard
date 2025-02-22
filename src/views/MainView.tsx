@@ -1,5 +1,6 @@
 // component example
 import { Anchor, Button, Center, Checkbox, Grid, Group, Loader, PasswordInput, Popover, Stack, Switch, Text, TextInput, Title, Tooltip } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 import { TbFingerprint } from 'react-icons/tb';
 import { Trans, useTranslation } from 'react-i18next';
 import { notify, join, decryptContent, encryptContent, writeToClipboard, readClipboardData, formatBytes, notification, formatSeconds, calculateContentSize } from '../common/utils';
@@ -11,7 +12,9 @@ import clipboard from "tauri-plugin-clipboard-api";
 import { VERSION, API_CONSTANTS, NOTIFICATION, PASSWORD_CONSTANTS, SOCKET_STATE, SOCKET_CONFIG } from '../constants';
 import { useFetchSWR, useFetchSWRMutation, useWebsocket } from '../hooks';
 import { debounce } from 'lodash-es';
-
+import { invoke } from '@tauri-apps/api/core';
+import * as tauriEvent from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
 export default function MainView() {
   const { t, i18n } = useTranslation();
@@ -138,6 +141,7 @@ export default function MainView() {
     // 设置连接状态
     setConnectionState(SOCKET_STATE.CONNECTED);
     socketRef.current?.connect();
+    setTrayTips();
     // 重置错误状态
     hasError.current = false;
     // 更新apiConfigRef
@@ -165,7 +169,7 @@ export default function MainView() {
     // 如果API密钥为空，则获取API密钥
     if (!apiKeyRef.current) {
       fetchApiKey({})
-        .then((res) => {
+        .then((res: any) => {
           console.log('[MainView] fetchApiKey res:', res);
           if (res?.key) {
             // 写入配置
@@ -173,7 +177,7 @@ export default function MainView() {
             setApiKeyConfig(res.key);
           }
         })
-        .catch((err) => {
+        .catch((err: any) => {
           console.error('[MainView] fetchApiKey error:', err);
         });
     }
@@ -200,6 +204,15 @@ export default function MainView() {
     i18n.changeLanguage(lang);
     setLanguage(lang);
   }
+
+  const iconTheme = useMediaQuery('(prefers-color-scheme: dark)') ? 'light' : 'dark';
+  useEffect(() => {
+    if (!language || !iconTheme) return;
+
+    changeLanguage(language);
+    setTrayTips();
+    invoke('update_tray', { lang: language, theme: iconTheme });
+  }, [language, iconTheme]);
 
 
   /**
@@ -248,6 +261,46 @@ export default function MainView() {
   }, [loading, startAtLogin]);
 
 
+  // 暂停同步
+  const [syncPaused, setSyncPaused] = useKVP('syncPaused', true);
+  const syncPausedRef = useRef(syncPaused);
+  useEffect(() => {
+    if (tauriLoading || loading) return;
+
+    syncPausedRef.current = syncPaused;
+    if (syncPaused) {
+      console.log('[MainView] sync is paused, disconnect socket');
+      socketRef.current?.disconnect();
+    } else {
+      console.log('[MainView] sync is resumed, reconnect socket');
+      socketRef.current?.connect();
+    }
+  }, [tauriLoading, loading, syncPaused]);
+
+  useEffect(() => {
+    const unlistenTrayEvent =
+      tauriEvent.listen('systemTray', async (event: TrayEvent) => {
+        const { message, data } = event.payload;
+
+        if (message === 'toggle-sync') {
+          const isPaused = data === 'paused';
+
+          syncPausedRef.current = isPaused;
+          setSyncPaused(isPaused);
+          setTrayTips();
+
+          notification.info(isPaused ? NOTIFICATION.SYNC_PAUSED : NOTIFICATION.SYNC_RESUMED);
+
+          console.log(`[clipboard] toggle sync state: ${data}`);
+        }
+      });
+
+    return () => {
+      unlistenTrayEvent.then(unlisten => unlisten());
+    };
+  }, []);
+
+
   /**
    * @description WebSocket连接处理
    */
@@ -262,8 +315,12 @@ export default function MainView() {
   }, [isConnecting, isConnected, error]);
   // 获取当前状态
   const socketState = useMemo(() => {
+    if (syncPaused) {
+      return SOCKET_CONFIG[SOCKET_STATE.PAUSED];
+    }
+
     return SOCKET_CONFIG[connectionState];
-  }, [connectionState]);
+  }, [syncPaused, connectionState]);
   // 获取状态文本和颜色
   const { text: socketStateText, color: socketStateColor } = useMemo(() => ({
     text: t(socketState.text),
@@ -272,10 +329,10 @@ export default function MainView() {
   // 监听云端剪贴板变化
   useEffect(() => {
     if (isConnected) {
-      console.log('[websocket] socket connected');
+      console.log('[websocket] init auth');
 
       socket?.emit('auth', apiKeyRef.current);
-      socket?.on('clipboard:sync', async (data) => {
+      socket?.on('clipboard:sync', async (data: any) => {
         if (data.sourceId === socket.id) return
 
         console.log('[websocket] recv ===============>', data);
@@ -288,6 +345,10 @@ export default function MainView() {
 
         await handleClipboardData(clipboardData);
       });
+    }
+
+    return () => {
+      socket?.off('clipboard:sync');
     }
   }, [isConnected, socket, apiKeyRef.current]);
 
@@ -314,11 +375,12 @@ export default function MainView() {
         // 在2秒内重复触发的，只处理最后一次
         const onClipboardUpdate = debounce(
           async () => {
-            // 如果是程序写入的数据,跳过处理
-            if (isProgramWriteRef.current) {
+            // 如果暂停同步或是程序写入的数据，则跳过处理
+            if (syncPausedRef.current || isProgramWriteRef.current) {
               isProgramWriteRef.current = false;
               return;
             }
+
             const clipboardData = await readClipboardData({ max_size: apiConfigRef.current?.clipboard_size });
             if (!clipboardData) {
               console.warn('[clipboard] no clipboard data');
@@ -384,7 +446,7 @@ export default function MainView() {
         'Content-Type': 'application/json'
       }
     })
-      .then((res) => {
+      .then((res: any) => {
         if (res?.code === 200) {
           console.log('[clipboard] upload success:', res);
           notification.success({
@@ -408,6 +470,12 @@ export default function MainView() {
       });
   }, [syncClipboard, apiEndpoint, apiKeyRef.current, socketRef?.current?.id]);
   const handleClipboardData = useCallback(async (data: ClipboardData) => {
+    // 如果暂停同步，则跳过处理
+    if (syncPausedRef.current) {
+      console.log('[clipboard] sync paused, skip', data);
+      return;
+    }
+
     const { type, content, source, plaintext } = data;
     // 处理内容
     let processedContent = content;
@@ -444,7 +512,17 @@ export default function MainView() {
 
       await uploadClipboard({ type, content });
     }
-  }, [enableEncryptionRef.current, encryptionPasswordRef.current, uploadClipboard]);
+  }, [enableEncryptionRef.current, encryptionPasswordRef.current, uploadClipboard, syncPausedRef.current]);
+
+
+  const setTrayTips = useCallback(() => {
+    (async () => {
+      await getCurrentWindow().setTitle(`CloudBoard v${VERSION}${syncPausedRef.current ? ` - ${t('Sync Paused')}` : ''}`);
+      await invoke('set_sync_state', { state: syncPausedRef.current ? 'paused' : 'running' });
+      await invoke('update_tray_tooltip', { tooltip: `CloudBoard v${VERSION}${syncPausedRef.current ? ` (${t('Sync Paused')})` : ''}` });
+      if (language && iconTheme) await invoke('update_tray', { lang: language, theme: iconTheme });
+    })();
+  }, [t, syncPausedRef.current, language, iconTheme]);
 
 
   const SocketState: React.FC = () => {

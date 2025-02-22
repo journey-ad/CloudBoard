@@ -28,7 +28,9 @@ export default function () {
 
   const { setColorScheme, toggleColorScheme } = useMantineColorScheme();
   const colorScheme = useComputedColorScheme();
-  setColorScheme("auto");
+  useEffect(() => {
+    setColorScheme("auto");
+  }, []);
   useHotkeys([['ctrl+J', toggleColorScheme]]);
 
   // Tauri event listeners (run on mount)
@@ -40,17 +42,17 @@ export default function () {
       return () => { promise.then(unlisten => unlisten()) };
     }, []);
     // system tray events
-    useEffect(() => {
-      const promise = tauriEvent.listen('systemTray', ({ payload, ...eventObj }: { payload: { message: string } }) => {
-        tauriLogger.info(payload.message);
-        // for debugging purposes only
-        // notifications.show({
-        //   title: '[DEBUG] System Tray Event',
-        //   message: payload.message
-        // });
-      });
-      return () => { promise.then(unlisten => unlisten()) };
-    }, []);
+    // useEffect(() => {
+    //   const promise = tauriEvent.listen('systemTray', ({ payload, ...eventObj }: { payload: { message: string, data: string } }) => {
+    //     console.log('[tray-event]', payload);
+    //     // for debugging purposes only
+    //     // notifications.show({
+    //     //   title: '[DEBUG] System Tray Event',
+    //     //   message: payload.message
+    //     // });
+    //   });
+    //   return () => { promise.then(unlisten => unlisten()) };
+    // }, []);
 
     // update checker
     // useEffect(() => {
@@ -111,7 +113,7 @@ export default function () {
     useEffect(() => {
       if (RUNNING_IN_TAURI) {
         const appWindow = getCurrentWebviewWindow();
-        
+
         // 监听窗口关闭事件
         const unlisten = appWindow.onCloseRequested(async (event) => {
           try {

@@ -3,8 +3,9 @@ import { io, Socket } from "socket.io-client";
 
 interface WebSocketConfig {
   url?: string;
-  reconnectAttempts?: number;
-  reconnectInterval?: number;
+  shouldConnect?: boolean;
+  reconnectionDelay?: number;
+  reconnectionDelayMax?: number;
 }
 
 interface WebSocketState {
@@ -23,17 +24,15 @@ interface WebSocketReturn extends WebSocketState {
   disconnect: () => void;
 }
 
-const DEFAULT_RECONNECT_ATTEMPTS = 3;
-const DEFAULT_RECONNECT_INTERVAL = 3000;
+const DEFAULT_RECONNECTION_DELAY = 3000; // default delay 3 seconds
+const DEFAULT_RECONNECTION_DELAY_MAX = 120000; // max delay 2 minutes
 
 export const useWebsocket = (
   config: WebSocketConfig,
   shouldConnect = !!config.url
 ): WebSocketReturn => {
-  const { url, reconnectAttempts = DEFAULT_RECONNECT_ATTEMPTS, reconnectInterval = DEFAULT_RECONNECT_INTERVAL } = config;
+  const { url, reconnectionDelay = DEFAULT_RECONNECTION_DELAY, reconnectionDelayMax = DEFAULT_RECONNECTION_DELAY_MAX } = config;
   const socketRef = useRef<Socket | null>(null);
-  const reconnectCountRef = useRef(0);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout>(null);
 
   const [state, setState] = useState<WebSocketState>({
     isConnecting: false,
@@ -42,9 +41,6 @@ export const useWebsocket = (
   });
 
   const cleanup = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-    }
     if (socketRef.current) {
       socketRef.current.removeAllListeners();
       socketRef.current.disconnect();
@@ -57,11 +53,13 @@ export const useWebsocket = (
 
     const socket = io(url, {
       transports: ['websocket'],
-      reconnection: false, // 我们自己处理重连逻辑
+      reconnectionDelay,
+      reconnectionDelayMax,
+      autoConnect: false,
     });
 
     socket.on('connect', () => {
-      reconnectCountRef.current = 0;
+      console.log('[socket] connected');
       setState({
         isConnecting: false,
         isConnected: true,
@@ -70,22 +68,17 @@ export const useWebsocket = (
     });
 
     socket.on('disconnect', () => {
+      console.log('[socket] disconnect');
       setState(prev => ({
         ...prev,
         isConnected: false,
         isConnecting: false,
       }));
-
-      // 尝试重连
-      if (reconnectCountRef.current < reconnectAttempts) {
-        reconnectCountRef.current += 1;
-        reconnectTimeoutRef.current = setTimeout(() => {
-          connect();
-        }, reconnectInterval);
-      }
+      cleanup();
     });
 
     socket.on('connect_error', (error: Error) => {
+      console.log('[socket] connect_error', error);
       setState({
         isConnecting: false,
         isConnected: false,
@@ -93,8 +86,18 @@ export const useWebsocket = (
       });
     });
 
+    socket.io.on('reconnect_attempt', (attempt: number) => {
+      console.log('reconnect_attempt', attempt);
+    });
+
+    socket.io.on('reconnect', (attempt: number) => {
+      console.log('reconnect', attempt);
+    });
+    
+    
+
     socketRef.current = socket;
-  }, [url, reconnectAttempts, reconnectInterval, cleanup]);
+  }, [url, reconnectionDelay, cleanup]);
 
   useEffect(() => {
     if (shouldConnect) {

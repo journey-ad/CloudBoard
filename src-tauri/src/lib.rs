@@ -19,9 +19,13 @@ use tauri_plugin_autostart::MacosLauncher;
 mod tray_icon;
 mod utils;
 
-use tray_icon::{create_tray_icon, tray_update_lang, TrayState};
+use tray_icon::{create_tray_icon, update_tray, update_tray_tooltip, set_sync_state, SyncState};
 // use utils::long_running_thread;
-use utils::{get_mime_type};
+use utils::get_mime_type;
+
+#[macro_use]
+extern crate rust_i18n;
+rust_i18n::i18n!("locales");
 
 #[derive(Clone, Serialize)]
 struct SingleInstancePayload {
@@ -72,7 +76,7 @@ pub fn run() {
     .plugin(tauri_plugin_shell::init())
     .plugin(tauri_plugin_fs::init())
     // custom commands
-    .invoke_handler(tauri::generate_handler![tray_update_lang, process_file, get_mime_type])
+    .invoke_handler(tauri::generate_handler![update_tray, update_tray_tooltip, set_sync_state, process_file, get_mime_type])
     // allow only one instance and propagate args and cwd to existing instance
     .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
       app
@@ -87,10 +91,10 @@ pub fn run() {
     // custom setup code
     .setup(|app| {
       let _ = create_tray_icon(app.handle());
-      app.manage(Mutex::new(TrayState::NotPlaying));
+      app.manage(Mutex::new(SyncState::Running));
 
       let app_handle = app.handle().clone();
-      tray_update_lang(app_handle, "en".into());
+      update_tray(app_handle, "en_US".to_string(), "light".to_string());
 
       // let app_handle = app.handle().clone();
       // tauri::async_runtime::spawn(async move { long_running_thread(&app_handle).await });

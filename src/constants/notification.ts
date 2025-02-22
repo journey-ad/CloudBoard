@@ -10,4 +10,6 @@ export const NOTIFICATION = {
   API_KEY_COPIED: "API Key has been copied to the clipboard",
   CLIPBOARD_UPLOAD_FAILED: "Failed to upload clipboard data",
   CLIPBOARD_UPLOAD_SUCCESS: "Clipboard data uploaded successfully",
+  SYNC_PAUSED: "Clipboard sync has been paused",
+  SYNC_RESUMED: "Clipboard sync has been resumed",
 } as const;

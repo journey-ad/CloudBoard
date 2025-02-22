@@ -24,14 +24,16 @@ export const SOCKET_STATE = {
   CONNECTING: 0,
   CONNECTED: 1,
   ERROR: 2,
-  DISCONNECTED: 3
+  DISCONNECTED: 3,
+  PAUSED: 4
 } as const;
 
 export const SOCKET_CONFIG = {
   [SOCKET_STATE.CONNECTING]: { text: 'Connecting', color: 'yellow' },
   [SOCKET_STATE.CONNECTED]: { text: 'Connected', color: 'green' },
   [SOCKET_STATE.ERROR]: { text: 'Connection Error', color: 'red' },
-  [SOCKET_STATE.DISCONNECTED]: { text: 'Disconnected', color: 'dimmed' }
+  [SOCKET_STATE.DISCONNECTED]: { text: 'Disconnected', color: 'dimmed' },
+  [SOCKET_STATE.PAUSED]: { text: 'Sync Paused', color: 'dimmed' }
 } as const;
 
 export * from './notification';

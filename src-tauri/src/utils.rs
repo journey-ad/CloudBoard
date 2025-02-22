@@ -2,7 +2,6 @@ use serde::Serialize;
 use std::time::Duration;
 // State is used by linux
 use tauri::{Emitter, Manager};
-use infer::Infer;
 #[derive(Clone, Serialize)]
 struct LongRunningThreadStruct {
   message: String,
