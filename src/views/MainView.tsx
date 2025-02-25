@@ -476,6 +476,13 @@ export default function MainView() {
       return;
     }
 
+    // 如果当前连接已断开， 尝试刷新页面
+    if (!socketRef.current?.connected) {
+      console.log('[clipboard] not connected, refresh page');
+      location.reload();
+      return;
+    }
+
     const { type, content, source, plaintext } = data;
     // 处理内容
     let processedContent = content;
