@@ -22,10 +22,7 @@ tauri-plugin-store = "2"
 tauri-plugin-single-instance = { version = "2" }
 tokio = { version = "1.36.0", features = ["time"] }
 tauri-plugin-fs = "2"
-tauri-plugin-shell = "2"
-tauri-plugin-notification = "2"
 tauri-plugin-os = "2"
-tauri-plugin-dialog = "2"
 tauri-plugin-process = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-deep-link = "2"
@@ -60,7 +57,7 @@ panic = "abort" # Strip expensive panic clean-up logic
 codegen-units = 1 # Compile crates one after another so the compiler can optimize better
 lto = true # Enables link to optimizations
 opt-level = "s" # Optimize for binary size
-# strip = true  # Automatically strip symbols from the binary.
+strip = true  # Automatically strip symbols from the binary.
 
 [lib]
 name = "app_lib"

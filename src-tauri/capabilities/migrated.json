@@ -16,7 +16,9 @@
     "fs:allow-fstat",
     {
       "identifier": "fs:scope",
-      "allow": [ "**" ]
+      "allow": [
+        "**"
+      ]
     },
     "core:window:allow-maximize",
     "core:window:allow-unmaximize",
@@ -29,9 +31,6 @@
     "core:window:allow-set-fullscreen",
     "core:window:allow-set-focus",
     "core:window:allow-start-dragging",
-    "shell:allow-open",
-    "dialog:allow-message",
-    "notification:default",
     "os:allow-platform",
     "os:allow-version",
     "os:allow-os-type",
@@ -42,10 +41,7 @@
     "os:allow-hostname",
     "process:allow-restart",
     "fs:default",
-    "shell:default",
-    "notification:default",
     "os:default",
-    "dialog:default",
     "process:default",
     "store:default",
     "opener:default",

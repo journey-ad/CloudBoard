@@ -33,11 +33,11 @@ struct SingleInstancePayload {
   cwd: String,
 }
 
-#[derive(Debug, Default, Serialize)]
-struct Example<'a> {
-  #[serde(rename = "Attribute 1")]
-  attribute_1: &'a str,
-}
+// #[derive(Debug, Default, Serialize)]
+// struct Example<'a> {
+//   #[serde(rename = "Attribute 1")]
+//   attribute_1: &'a str,
+// }
 
 #[cfg(target_os = "linux")]
 pub struct DbusState(Mutex<Option<dbus::blocking::SyncConnection>>);
@@ -70,10 +70,7 @@ pub fn run() {
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_store::Builder::new().build())
     .plugin(tauri_plugin_process::init())
-    .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_os::init())
-    .plugin(tauri_plugin_notification::init())
-    .plugin(tauri_plugin_shell::init())
     .plugin(tauri_plugin_fs::init())
     // custom commands
     .invoke_handler(tauri::generate_handler![update_tray, update_tray_tooltip, set_sync_state, process_file, get_mime_type])
@@ -119,9 +116,9 @@ pub fn run() {
 // TODO: optimize permissions
 // TODO: decorations false and use custom title bar
 
-#[tauri::command] 
-fn handle_window_close_event(app: tauri::AppHandle) {
-  if let Some(window) = app.get_webview_window("main") {
-    window.hide().unwrap();
-  }
-}
+// #[tauri::command] 
+// fn handle_window_close_event(app: tauri::AppHandle) {
+//   if let Some(window) = app.get_webview_window("main") {
+//     window.hide().unwrap();
+//   }
+// }
