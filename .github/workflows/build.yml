@@ -141,7 +141,13 @@ jobs:
           prerelease: false
           args: --target ${{ matrix.target }}
 
-      - name: Upload Portable Binaries (Windows)
+      - name: Install UPX (Windows only)
+        if: ${{ matrix.runner == 'windows-latest' }}
+        uses: crazy-max/ghaction-upx@v3
+        with:
+          install-only: true
+
+      - name: Upload Portable Binaries (Windows only)
         if: ${{ github.ref_type == 'tag' && matrix.runner == 'windows-latest' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -154,5 +160,6 @@ jobs:
           }
           $portableName = "${{ env.APP_NAME }}_${{ github.ref_name }}_x64-portable-release.exe"
           Copy-Item $sourceExe.FullName $portableName
+          upx -fq $portableName
           gh release upload ${{ github.ref_name }} $portableName --clobber
           Write-Host "Uploaded portable binary to release tag=${{ github.ref_name }} portableName=$portableName"
