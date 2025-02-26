@@ -15,6 +15,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Build changelog
         id: build_changelog
@@ -22,10 +24,32 @@ jobs:
           # NOTE: if commits subjects are standardized, you can filter the git log based on feat: and fix:
           # and then replace "feat:" with "New: " and "fix:" with "Fixed "
           # when AI gets good, we can also summarized commits into a bullet point list
-          PREV_TAG=$(git tag --list v* | tail -n2 | head -n1)
-          echo "changelog=$(git log $PREV_TAG...${{ github.ref_name }} --pretty=format:"- %s")" >> $GITHUB_OUTPUT
+
+          # previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || git rev-list --max-parents=0 HEAD)
+
+          # changelog
+          CHANGELOG=$(git log $PREV_TAG...${{ github.ref_name }} --pretty=format:"- %s %h")
+          if [ -z "$CHANGELOG" ]; then
+            CHANGELOG="- Initial release"
+          fi
+
+          # full changelog
+          FULL_CHANGELOG="https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${{ github.ref_name }}"
+
+          # output changelog
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          # output full changelog
+          echo "full_changelog=$FULL_CHANGELOG" >> $GITHUB_OUTPUT
+
+          # output content
+          cat "$GITHUB_OUTPUT"
     outputs:
       changelog: ${{ steps.build_changelog.outputs.changelog }}
+      full_changelog: ${{ steps.build_changelog.outputs.full_changelog }}
   release:
     strategy:
       fail-fast: false
@@ -135,8 +159,15 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "${{ env.APP_NAME }} v__VERSION__"
           releaseBody: |
+            **Commits:**
             ${{needs.changelog.outputs.changelog}}
-            See the assets to download this version and install.
+            
+            **Full Changelog:** ${{needs.changelog.outputs.full_changelog}}
+            
+            ---
+            Download the binary package below. For Windows users, a portable version (requires WebView2) is available. If it doesn't work, please try the MSI or NSIS installer.
+            
+            展开底部的Assets下载预编译包。Windows提供有单文件绿色版（需要系统支持WebView2），如果系统版本低于windows 10 1804，可以通过MSI或NSIS安装器安装
           releaseDraft: true
           prerelease: false
           args: --target ${{ matrix.target }}
