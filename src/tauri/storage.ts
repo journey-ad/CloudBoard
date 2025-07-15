@@ -18,14 +18,8 @@ const SAVE_DELAY = 100;
 export function createStorage(storePath: string | null) {
 	const [data, setData] = useMutative<Record<string, any> | undefined>(undefined);
 	const [loading, setLoading] = useState(true);
-	const loadingRef = useRef(loading);
-	const localDataRef = useRef(null);
 	const fileStoreRef = useRef<Store | null>(null);
 	const timeoutRef = useRef<number>(undefined);
-
-	useEffect(() => {
-		loadingRef.current = loading;
-	}, [loading]);
 
 	// load data
 	useEffect(() => {
@@ -77,10 +71,10 @@ export function createStorage(storePath: string | null) {
 	}, [storePath]);
 
 	const setItem = useCallback((key: string, newValueOrHandler: Dispatch<SetStateAction<any>>) => {
-		if (loadingRef.current) return;
+		if (loading) return;
 		window.clearTimeout(timeoutRef.current);
 		setData(data => {
-			if (loadingRef.current || data === undefined) return;
+			if (loading || data === undefined) return;
 			const prev = data[key];
 			let value: any = newValueOrHandler;
 			try {
@@ -95,21 +89,24 @@ export function createStorage(storePath: string | null) {
 				}
 			}
 		});
-	}, [storePath, loadingRef, fileStoreRef, localDataRef, timeoutRef]);
+	}, [storePath, loading, fileStoreRef, timeoutRef]);
 
 	const getItem = useCallback((key: string, defaultValue: object) => {
-		if (loadingRef.current) return undefined;
+		if (loading) return undefined;
 		if (data === undefined) return defaultValue;
 		const value = data[key];
+		// 只有在配置加载完成且键值不存在时，才使用默认值并写入配置
 		if (value === undefined && defaultValue !== undefined) {
 			setData(data => {
 				if (data !== undefined) data[key] = defaultValue;
 			});
-			fileStoreRef.current!.set(key, defaultValue);
+			if (RUNNING_IN_TAURI && fileStoreRef.current) {
+				fileStoreRef.current.set(key, defaultValue);
+			}
 			return defaultValue;
 		}
 		return value;
-	}, [loadingRef, data]);
+	}, [loading, data]);
 
 	const useItem = useCallback((key: string, defaultValue: any) => {
 		const value = getItem(key, defaultValue);

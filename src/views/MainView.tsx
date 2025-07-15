@@ -15,6 +15,8 @@ import { debounce } from 'lodash-es';
 import { invoke } from '@tauri-apps/api/core';
 import * as tauriEvent from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import type { Event } from '@tauri-apps/api/event';
+import type { TrayEvent, ClipboardData } from '../types/typedef';
 
 export default function MainView() {
   const { t, i18n } = useTranslation();
@@ -33,7 +35,7 @@ export default function MainView() {
   const [connectionState, setConnectionState] = useState<typeof SOCKET_STATE[keyof typeof SOCKET_STATE]>(SOCKET_STATE.DISCONNECTED);
 
   // 临时URL状态（仅用于输入框）
-  const [apiBaseUrlInputValue, setApiBaseUrlInputValue] = useState(apiBaseUrlConfig);
+  const [apiBaseUrlInputValue, setApiBaseUrlInputValue] = useState(apiBaseUrlConfig || '');
 
   const changeApiBaseUrl = useCallback(async (url: string) => {
     try {
@@ -44,7 +46,7 @@ export default function MainView() {
         throw new Error('Invalid API Endpoint');
       }
 
-      const newUrl = parsedUrl.toString();
+      const newUrl = parsedUrl.toString().replace(/\/$/, '');
 
       // 未修改时跳过
       if (apiBaseUrlRef.current === newUrl) return;
@@ -62,22 +64,19 @@ export default function MainView() {
       notification.error(NOTIFICATION.INVALID_API_ENDPOINT);
     }
   }, [setApiBaseUrlConfig, apiBaseUrlRef]);
-  // apiBaseUrlRef变更后处理
+  // 同步配置变化到 ref
   useEffect(() => {
-    if (apiBaseUrlRef.current !== apiBaseUrlInputValue) {
-      setApiBaseUrlInputValue(apiBaseUrlRef.current); // 同步到输入框
-    }
-  }, [apiBaseUrlRef.current]);
-  // 初始化
-  useEffect(() => {
-    if (loading) return;
-    console.log('[MainView] initialize apiBaseUrl:', apiBaseUrlRef.current);
-
-    if (apiBaseUrlRef.current !== apiBaseUrlConfig) {
+    if (apiBaseUrlConfig !== undefined) {
       apiBaseUrlRef.current = apiBaseUrlConfig;
-      setApiBaseUrlInputValue(apiBaseUrlConfig); // 同步到输入框
+      setApiBaseUrlInputValue(apiBaseUrlConfig);
     }
-  }, [loading, apiBaseUrlConfig]);
+  }, [apiBaseUrlConfig]);
+
+  useEffect(() => {
+    if (apiKeyConfig !== undefined) {
+      apiKeyRef.current = apiKeyConfig;
+    }
+  }, [apiKeyConfig]);
 
 
   const apiEndpoint = useMemo(() => {
@@ -140,7 +139,8 @@ export default function MainView() {
     // 成功取到数据后
     // 设置连接状态
     setConnectionState(SOCKET_STATE.CONNECTED);
-    socketRef.current?.connect();
+    // 这里不能直接调用connectSocket，因为它还没有声明
+    // 我们在后面的useEffect中处理连接
     setTrayTips();
     // 重置错误状态
     hasError.current = false;
@@ -206,13 +206,16 @@ export default function MainView() {
   }
 
   const iconTheme = useMediaQuery('(prefers-color-scheme: dark)') ? 'light' : 'dark';
+
+  // 初始化语言设置
   useEffect(() => {
+    if (loading) return; // 等待存储加载完成
     if (!language || !iconTheme) return;
 
     changeLanguage(language);
     setTrayTips();
     invoke('update_tray', { lang: language, theme: iconTheme });
-  }, [language, iconTheme]);
+  }, [loading, language, iconTheme]);
 
 
   /**
@@ -265,7 +268,7 @@ export default function MainView() {
   const [syncPaused, setSyncPaused] = useKVP('syncPaused', true);
   const syncPausedRef = useRef(syncPaused);
   useEffect(() => {
-    if (tauriLoading || loading) return;
+    if (tauriLoading) return;
 
     syncPausedRef.current = syncPaused;
     if (syncPaused) {
@@ -273,13 +276,13 @@ export default function MainView() {
       socketRef.current?.disconnect();
     } else {
       console.log('[MainView] sync is resumed, reconnect socket');
-      socketRef.current?.connect();
+      // 恢复时的连接会在后面的useEffect中处理
     }
-  }, [tauriLoading, loading, syncPaused]);
+  }, [tauriLoading, syncPaused]);
 
   useEffect(() => {
     const unlistenTrayEvent =
-      tauriEvent.listen('systemTray', async (event: TrayEvent) => {
+      tauriEvent.listen('systemTray', async (event: Event<TrayEvent>) => {
         const { message, data } = event.payload;
 
         if (message === 'toggle-sync') {
@@ -304,15 +307,41 @@ export default function MainView() {
   /**
    * @description WebSocket连接处理
    */
-  const { socket, socketRef, isConnecting, isConnected, error } = useWebsocket({
+  const [clientId, setClientId] = useState<string>(''); // 客户端 ID state
+  const { socket, socketRef, isConnecting, isConnected, error, connect: connectSocket } = useWebsocket({
     url: apiEndpoint.wsUrl
   });
   useEffect(() => {
+    console.log('WebSocket状态变化:', {
+      isConnecting,
+      isConnected,
+      error: error?.message,
+      socketId: socketRef.current?.id,
+      wsUrl: apiEndpoint.wsUrl,
+      apiBaseUrl: apiBaseUrlRef.current
+    });
     if (isConnecting) setConnectionState(SOCKET_STATE.CONNECTING);
-    if (isConnected) setConnectionState(SOCKET_STATE.CONNECTED);
+    if (isConnected) {
+      setConnectionState(SOCKET_STATE.CONNECTED);
+      // 连接成功后更新客户端 ID
+      if (socketRef.current?.id) {
+        setClientId(socketRef.current.id);
+      }
+    }
     if (error) setConnectionState(SOCKET_STATE.ERROR);
-    if (!isConnecting && !isConnected && !error) setConnectionState(SOCKET_STATE.DISCONNECTED);
-  }, [isConnecting, isConnected, error]);
+    if (!isConnecting && !isConnected && !error) {
+      setConnectionState(SOCKET_STATE.DISCONNECTED);
+      // 断开连接时清空客户端 ID
+      setClientId('');
+    }
+  }, [isConnecting, isConnected, error, socketRef.current?.id]);
+  // 当API配置获取成功时，连接WebSocket
+  useEffect(() => {
+    if (apiConfig && !syncPaused && !isConnected) {
+      console.log('[MainView] API config loaded, connecting socket');
+      connectSocket();
+    }
+  }, [apiConfig, syncPaused, isConnected, connectSocket]);
   // 获取当前状态
   const socketState = useMemo(() => {
     if (syncPaused) {
@@ -539,7 +568,7 @@ export default function MainView() {
         {
           apiConfig && (
             <>
-              <Text size='xs'>{t('Client ID')}: {socketRef.current?.id || '-'}</Text>
+              <Text size='xs'>{t('Client ID')}: {clientId || '-'}</Text>
               <Text size='xs'>{t('clipboard_type', { type: apiConfig?.clipboard_type || '-' })}</Text>
               <Text size='xs'>{t('clipboard_size', { size: apiConfig?.clipboard_size ? formatBytes(apiConfig?.clipboard_size) : '-' })}</Text>
               <Text size='xs'>{t('clipboard_ttl', { ttl: apiConfig?.clipboard_ttl || '-' })}</Text>
@@ -606,16 +635,16 @@ export default function MainView() {
           }
           leftSectionPointerEvents='all'
           placeholder={t('Input End-to-End Password')}
-          value={password}
+          value={password || ''}
           minLength={PASSWORD_CONSTANTS.MIN_LENGTH}
           maxLength={PASSWORD_CONSTANTS.MAX_LENGTH}
           required
           disabled={!enableEncryption}
-          onBlur={() => checkPassword(password)}
+          onBlur={() => checkPassword(password || '')}
           onChange={(e) => setPassword(e.currentTarget.value.trim())}
         />
       </div>
-      <Switch onLabel={t('ON')} offLabel={t('OFF')} size="md" checked={enableEncryption} onChange={e => setEnableEncryption(e.currentTarget.checked)} />
+      <Switch onLabel={t('ON')} offLabel={t('OFF')} size="md" checked={!!enableEncryption} onChange={e => setEnableEncryption(e.currentTarget.checked)} />
     </Group>
 
     <Group justify="space-between" wrap="nowrap" gap="xl">
@@ -625,7 +654,7 @@ export default function MainView() {
           {t('It will launch cloudboard automatically when the system starts')}
         </Text>
       </div>
-      <Switch onLabel={t('ON')} offLabel={t('OFF')} size="md" checked={startAtLogin} onChange={e => setStartAtLogin(e.currentTarget.checked)} />
+      <Switch onLabel={t('ON')} offLabel={t('OFF')} size="md" checked={!!startAtLogin} onChange={e => setStartAtLogin(e.currentTarget.checked)} />
     </Group>
 
     <Group style={{ marginTop: 'auto', marginBottom: '-.3rem' }} justify="center" wrap="nowrap" gap="xs">

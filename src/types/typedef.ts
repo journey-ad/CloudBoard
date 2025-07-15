@@ -6,7 +6,7 @@ type ClipboardSource = 'local' | 'remote';
 /**
  * @description 剪贴板数据类型
  */
-type ClipboardData = {
+export type ClipboardData = {
   type: ClipboardDataType;
   content: string;
   source: ClipboardSource;
@@ -16,26 +16,26 @@ type ClipboardData = {
 /**
  * @description 剪贴板内容类型
  */
-type ClipboardDataType = 'text' | 'image' | 'html' | 'rtf' | 'files';
+export type ClipboardDataType = 'text' | 'image' | 'html' | 'rtf' | 'files';
 
-interface ApiKeyResponse {
+export interface ApiKeyResponse {
   key: string;
 }
 
-interface ConfigResponse {
+export interface ConfigResponse {
   max_cache_items: number;
   max_cache_size: number;
   clipboard_size: number;
   clipboard_ttl: number;
 }
 
-interface SyncResponse {
+export interface SyncResponse {
   success: boolean;
   message?: string;
 }
 
 // 定义 WebSocket 状态枚举
-enum SocketState {
+export enum SocketState {
   CONNECTING,
   CONNECTED,
   ERROR,

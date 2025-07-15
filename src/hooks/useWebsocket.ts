@@ -48,7 +48,37 @@ export const useWebsocket = (
   }, []);
 
   const connect = useCallback(() => {
-    cleanup();
+    console.log('[socket] connect() called with url:', url);
+
+    // 如果已经有socket且已连接，但URL不匹配，需要重新创建
+    if (socketRef.current && socketRef.current.connected) {
+      // 检查URL是否匹配，如果不匹配则需要重新创建
+      const currentUrl = (socketRef.current as any).io?.uri;
+      if (currentUrl !== url) {
+        console.log('[socket] URL changed, recreating socket. Old:', currentUrl, 'New:', url);
+        cleanup();
+      } else {
+        console.log('[socket] already connected with correct URL, skipping');
+        return;
+      }
+    }
+
+    // 如果有socket但未连接，检查URL是否匹配
+    if (socketRef.current && !socketRef.current.connected) {
+      const currentUrl = (socketRef.current as any).io?.uri;
+      if (currentUrl !== url) {
+        console.log('[socket] URL changed, recreating socket. Old:', currentUrl, 'New:', url);
+        cleanup();
+      } else {
+        console.log('[socket] existing socket found, trying to connect');
+        setState(prev => ({ ...prev, isConnecting: true }));
+        socketRef.current.connect();
+        return;
+      }
+    }
+
+    // 创建新的socket
+    console.log('[socket] creating new socket');
     setState(prev => ({ ...prev, isConnecting: true }));
 
     const socket = io(url, {
@@ -57,6 +87,8 @@ export const useWebsocket = (
       reconnectionDelayMax,
       autoConnect: false,
     });
+
+    console.log('[socket] socket instance created, adding event listeners');
 
     socket.on('connect', () => {
       console.log('[socket] connected');
@@ -67,14 +99,15 @@ export const useWebsocket = (
       });
     });
 
-    socket.on('disconnect', () => {
-      console.log('[socket] disconnect');
+    socket.on('disconnect', (reason) => {
+      console.log('[socket] disconnect', reason);
       setState(prev => ({
         ...prev,
         isConnected: false,
         isConnecting: false,
       }));
-      cleanup();
+      // 不要在disconnect时cleanup，这样可以保持socket对象用于重连
+      // cleanup();
     });
 
     socket.on('connect_error', (error: Error) => {
@@ -88,16 +121,23 @@ export const useWebsocket = (
 
     socket.io.on('reconnect_attempt', (attempt: number) => {
       console.log('reconnect_attempt', attempt);
+      setState(prev => ({ ...prev, isConnecting: true }));
     });
 
     socket.io.on('reconnect', (attempt: number) => {
       console.log('reconnect', attempt);
+      setState({
+        isConnecting: false,
+        isConnected: true,
+        error: null,
+      });
     });
-    
-    
 
+    console.log('[socket] calling socket.connect()');
+    socket.connect();
     socketRef.current = socket;
-  }, [url, reconnectionDelay, cleanup]);
+    console.log('[socket] socket assigned to ref');
+  }, [url, reconnectionDelay, reconnectionDelayMax, cleanup]);
 
   useEffect(() => {
     if (shouldConnect) {
