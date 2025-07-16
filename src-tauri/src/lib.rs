@@ -14,7 +14,7 @@ use tauri::{
 };
 use tauri_plugin_store;
 use tauri_plugin_window_state;
-use tauri_plugin_autostart::MacosLauncher;
+use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 
 mod tray_icon;
 mod utils;
@@ -48,6 +48,33 @@ fn process_file(filepath: String) -> String {
   "Hello from Rust!".into()
 }
 
+#[tauri::command]
+async fn enable_autostart(app: tauri::AppHandle) -> Result<(), String> {
+  let autostart_manager = app.autolaunch();
+  autostart_manager.enable().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn disable_autostart(app: tauri::AppHandle) -> Result<(), String> {
+  let autostart_manager = app.autolaunch();
+  autostart_manager.disable().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn is_autostart_enabled(app: tauri::AppHandle) -> Result<bool, String> {
+  let autostart_manager = app.autolaunch();
+  autostart_manager.is_enabled().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn show_main_window(app: tauri::AppHandle) -> Result<(), String> {
+  if let Some(window) = app.get_webview_window("main") {
+    window.show().map_err(|e| e.to_string())?;
+    window.set_focus().map_err(|e| e.to_string())?;
+  }
+  Ok(())
+}
+
 #[cfg(target_os = "linux")]
 fn webkit_hidpi_workaround() {
   // See: https://github.com/spacedriveapp/spacedrive/issues/1512#issuecomment-1758550164
@@ -63,9 +90,14 @@ fn main_prelude() {
 pub fn run() {
   main_prelude();
   // main window should be invisible to allow either the setup delay or the plugin to show the window
-  tauri::Builder::default()
+  
+  // 检查启动参数
+  let args: Vec<String> = std::env::args().collect();
+  let is_hidden = args.iter().any(|arg| arg == "--hidden");
+  
+  let mut builder = tauri::Builder::default()
     .plugin(tauri_plugin_clipboard::init())
-    .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec!["--flag1", "--flag2"]) /* arbitrary number of args to pass to your app */))
+    .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec!["--hidden"]) /* hidden startup flag */))
     .plugin(tauri_plugin_log::Builder::new().build())
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_store::Builder::new().build())
@@ -73,18 +105,43 @@ pub fn run() {
     .plugin(tauri_plugin_os::init())
     .plugin(tauri_plugin_fs::init())
     // custom commands
-    .invoke_handler(tauri::generate_handler![update_tray, update_tray_tooltip, set_sync_state, process_file, get_mime_type])
+    .invoke_handler(tauri::generate_handler![
+      update_tray, 
+      update_tray_tooltip, 
+      set_sync_state, 
+      process_file, 
+      get_mime_type,
+      enable_autostart,
+      disable_autostart,
+      is_autostart_enabled,
+      show_main_window
+    ])
     // allow only one instance and propagate args and cwd to existing instance
     .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+      // 当已有实例运行时，新实例启动会触发此回调
+      let is_hidden = args.iter().any(|arg| arg == "--hidden");
+      
+      if !is_hidden {
+        // 非隐藏启动，显示并聚焦窗口
+        if let Some(window) = app.get_webview_window("main") {
+          let _ = window.show();
+          let _ = window.set_focus();
+        }
+      }
+      
       app
         .emit("newInstance", SingleInstancePayload { args, cwd })
         .unwrap();
     }))
     // persistent storage with filesystem
-    .plugin(tauri_plugin_store::Builder::default().build())
-    // save window position and size between sessions
-    // if you remove this, make sure to uncomment the mainWebview?.show line in TauriProvider.tsx
-    .plugin(tauri_plugin_window_state::Builder::default().build())
+    .plugin(tauri_plugin_store::Builder::default().build());
+    
+  // 只有在非隐藏模式下才加载window_state插件
+  if !is_hidden {
+    builder = builder.plugin(tauri_plugin_window_state::Builder::default().build());
+  }
+  
+  builder
     // custom setup code
     .setup(|app| {
       let _ = create_tray_icon(app.handle());
@@ -93,16 +150,22 @@ pub fn run() {
       let app_handle = app.handle().clone();
       update_tray(app_handle, "en_US".to_string(), "light".to_string());
 
-      // let app_handle = app.handle().clone();
-      // tauri::async_runtime::spawn(async move { long_running_thread(&app_handle).await });
+      // 检查启动参数来决定是否显示窗口
+      let args: Vec<String> = std::env::args().collect();
+      let is_hidden = args.iter().any(|arg| arg == "--hidden");
+      
+      if !is_hidden {
+        // 非隐藏启动：显示窗口
+        if let Some(window) = app.get_webview_window("main") {
+          let _ = window.show();
+          let _ = window.set_focus();
+        }
+      }
 
       #[cfg(target_os = "linux")]
       app.manage(DbusState(Mutex::new(
         dbus::blocking::SyncConnection::new_session().ok(),
       )));
-
-      // TODO: AUTOSTART
-      // FOLLOW: https://v2.tauri.app/plugin/autostart/
 
       Ok(())
     })

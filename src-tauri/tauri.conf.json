@@ -64,7 +64,7 @@
         "height": 250,
         "resizable": false,
         "fullscreen": false,
-        "visible": true,
+        "visible": false,
         "decorations": true,
         "alwaysOnTop": true,
         "maximizable": false,
